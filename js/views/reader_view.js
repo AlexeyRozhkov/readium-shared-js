@@ -25,13 +25,13 @@
 //  OF THE POSSIBILITY OF SUCH DAMAGE.
 
 define(["../globals", "jquery", "underscore", "eventEmitter", "./fixed_view", "../helpers", "./iframe_loader", "./internal_links_support",
-        "./media_overlay_data_injector", "./media_overlay_player", "../models/package", "../models/metadata", "../models/page_open_request",
+        "./media_overlay_data_injector", "./media_overlay_player", "../models/package", "../models/page_open_request",
         "./reflowable_view", "./scroll_view", "../models/style_collection", "../models/switches", "../models/trigger",
-        "../models/viewer_settings", "../models/bookmark_data", "../models/node_range_info", "./external_agent_support"],
+        "../models/viewer_settings", "../models/bookmark_data", "../models/node_range_info"],
     function (Globals, $, _, EventEmitter, FixedView, Helpers, IFrameLoader, InternalLinksSupport,
-              MediaOverlayDataInjector, MediaOverlayPlayer, Package, Metadata, PageOpenRequest,
+              MediaOverlayDataInjector, MediaOverlayPlayer, Package, PageOpenRequest,
               ReflowableView, ScrollView, StyleCollection, Switches, Trigger,
-              ViewerSettings, BookmarkData, NodeRangeInfo, ExternalAgentSupport) {
+              ViewerSettings, BookmarkData, NodeRangeInfo) {
 /**
  * Options passed on the reader from the readium loader/initializer
  *
@@ -52,7 +52,6 @@ var ReaderView = function (options) {
     var self = this;
     var _currentView = undefined;
     var _package = undefined;
-    var _metadata = undefined;
     var _spine = undefined;
     var _viewerSettings = new ViewerSettings({});
     //styles applied to the container divs
@@ -60,14 +59,13 @@ var ReaderView = function (options) {
     //styles applied to the content documents
     var _bookStyles = new StyleCollection();
     var _internalLinksSupport = new InternalLinksSupport(this);
-    var _externalAgentSupport = new ExternalAgentSupport(this);
     var _mediaOverlayPlayer;
     var _mediaOverlayDataInjector;
     var _iframeLoader;
     var _$el;
 
     //We will call onViewportResize after user stopped resizing window
-    var lazyResize = Helpers.extendedThrottle(
+    var lazyResize = Helpers.extendedThrottle(		
         handleViewportResizeStart,
         handleViewportResizeTick,
         handleViewportResizeEnd, 250, 1000, self);
@@ -236,8 +234,7 @@ var ReaderView = function (options) {
         self.emit(Globals.Events.READER_VIEW_CREATED, desiredViewType);
 
         _currentView.on(Globals.Events.CONTENT_DOCUMENT_LOADED, function ($iframe, spineItem) {
-            var contentDoc = $iframe[0].contentDocument;
-
+            
             Globals.logEvent("CONTENT_DOCUMENT_LOADED", "ON", "reader_view.js (current view) [ " + spineItem.href + " ]");
 
             if (!Helpers.isIframeAlive($iframe[0])) return;
@@ -247,8 +244,7 @@ var ReaderView = function (options) {
 
             _internalLinksSupport.processLinkElements($iframe, spineItem);
 
-            _externalAgentSupport.bindToContentDocument(contentDoc, spineItem);
-
+            var contentDoc = $iframe[0].contentDocument;
             Trigger.register(contentDoc);
             Switches.apply(contentDoc);
 
@@ -280,11 +276,6 @@ var ReaderView = function (options) {
             _.defer(function () {
                 Globals.logEvent("PAGINATION_CHANGED", "EMIT", "reader_view.js");
                 self.emit(Globals.Events.PAGINATION_CHANGED, pageChangeData);
-                
-                if (!pageChangeData.spineItem) return;
-                _.defer(function () {
-                    _externalAgentSupport.updateContentDocument(pageChangeData.spineItem);
-                });
             });
         });
 
@@ -357,15 +348,6 @@ var ReaderView = function (options) {
     };
 
     /**
-     * Returns a data object based on the package document metadata
-     *
-     * @returns {Models.Metadata}
-     */
-    this.metadata = function () {
-        return _metadata;
-    };
-
-    /**
      * Returns a representation of the spine as a data object, also acts as list of spine items
      *
      * @returns {Models.Spine}
@@ -404,7 +386,6 @@ var ReaderView = function (options) {
         var packageData = openBookData.package ? openBookData.package : openBookData;
 
         _package = new Package(packageData);
-        _metadata = new Metadata(packageData.metadata);
 
         _spine = _package.spine;
         _spine.handleLinear(true);
@@ -1037,7 +1018,7 @@ var ReaderView = function (options) {
 
         if (!ReadiumSDK) return;
 
-        var DEBUG = true; // change this to visualize the CFI range
+        var DEBUG = false; // change this to visualize the CFI range
         if (!DEBUG) return;
             
         var paginationInfo = this.getPaginationInfo();
@@ -1250,6 +1231,11 @@ var ReaderView = function (options) {
 
     function handleViewportResizeStart() {
 
+		if(ReadiumSDK.blockViewResize){
+			console.log('handleViewportResizeStart blockViewResize');
+			return;
+		}			
+		
         _resizeBookmark = null;
         _resizeMOWasPlaying = false;
 
@@ -1267,12 +1253,22 @@ var ReaderView = function (options) {
     }
 
     function handleViewportResizeTick() {
+		if(ReadiumSDK.blockViewResize){
+			console.log('handleViewportResizeTick blockViewResize');
+			return;
+		}
+		
         if (_currentView) {
             self.handleViewportResize(_resizeBookmark);
         }
     }
 
     function handleViewportResizeEnd() {
+		if(ReadiumSDK.blockViewResize){
+			console.log('handleViewportResizeEnd blockViewResize');
+			return;
+		}
+		
         //same as doing one final tick for now
         handleViewportResizeTick();
 
